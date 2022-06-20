@@ -1,0 +1,63 @@
+version: "3.2"
+
+services:
+    postgres:
+        container_name: ${COMPOSE_PROJECT_NAME}-postgres
+        image: postgres:12.3-alpine
+        restart: always
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+        environment:
+            POSTGRES_USER: dev
+            POSTGRES_PASSWORD: password
+            POSTGRES_DB: postgres
+        ports:
+            - "5432:5432"
+        networks:
+            - multi-tenant-network
+    
+    dependencies:
+        container_name: ${COMPOSE_PROJECT_NAME}-dependencies
+        depends_on:
+            - postgres
+            # ... the other dependencies if needed
+        image: dadarek/wait-for-dependencies
+        command: |
+            postgres:5432
+        environment:
+            SLEEP_LENGTH: 5
+            TIMEOUT_LENGTH: 60
+        networks:
+            - multi-tenant-network
+
+    multi-tenant-app:
+        container_name: ${COMPOSE_PROJECT_NAME}-app
+        depends_on:
+            - dependencies
+        build:
+            context: .
+            dockerfile: ./docker/Dockerfile
+        ports:
+            - "3000:3000"
+        networks:
+            - multi-tenant-network
+        environment:
+            NODE_ENV: "develop"
+            API_PREFIX: "api/v1"
+            PORT: 3000
+            DATABASE_HOST: 'postgres'
+            DATABASE_PORT: 5432
+            DATABASE_USERNAME: "dev"
+            DATABASE_PASSWORD: "password"
+            DATABASE_DEFAULT: "postgres"
+        command: ["node", "dist/main"]
+
+networks:
+    multi-tenant-network:
+        name: ${COMPOSE_PROJECT_NAME}-network
+        driver: bridge
+
+volumes:
+    postgres-data:
+        name: ${COMPOSE_PROJECT_NAME}-postgres-data
+        driver: local
